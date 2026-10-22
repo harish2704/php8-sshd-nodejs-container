@@ -1,0 +1,8 @@
+#!/bin/bash
+
+trap "echo Shutting down; exit 0" SIGTERM SIGINT SIGKILL
+
+/etc/init.d/dropbear start
+/etc/init.d/caddy start
+
+/bin/sleep infinity & wait

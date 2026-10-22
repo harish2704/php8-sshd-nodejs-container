@@ -1,0 +1,238 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          caddy
+# Required-Start:    $local_fs $network $remote_fs
+# Required-Stop:     $local_fs $network $remote_fs
+# Should-Start:      $time
+# Default-Start:     2 3 4 5
+# Default-Stop:       0 1 6
+# Short-Description: Caddy / FrankenPHP web server
+# Description:       Starts, stops, restarts and reloads the Caddy web
+#                    server (the FrankenPHP build of Caddy that serves the
+#                    PHP applications) inside this container.
+### END INIT INFO
+
+# A classic, LSB compliant SysV init script. Install it as
+# /etc/init.d/caddy and enable it with:
+#
+#     chmod +x /etc/init.d/caddy
+#     update-rc.d caddy defaults
+#
+# It is then started automatically when the container boots into runlevel 2
+# via "/sbin/init 2".
+#
+# The FrankenPHP image ships a single binary, /usr/local/bin/frankenphp,
+# which *is* Caddy (with the FrankenPHP module compiled in). Every Caddy
+# sub-command (run, stop, reload, ...) is therefore available through it,
+# which is why this script invokes "frankenphp" rather than "caddy".
+
+. /lib/lsb/init-functions
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
+
+DESC="Caddy / FrankenPHP web server"
+NAME=caddy
+DAEMON=/usr/local/bin/frankenphp
+
+# Defaults. Any of these can be overridden by setting the matching
+# variable in /etc/default/caddy (sourced below). Caddyfile environment
+# substitutions such as {$SERVER_NAME} can be exported from that file too,
+# e.g. "export SERVER_NAME=example.com".
+CONFIG=/etc/frankenphp/Caddyfile
+ADAPTER=caddyfile
+PIDFILE=/run/${NAME}.pid
+LOGFILE=/var/log/${NAME}/${NAME}.log
+
+# Admin API address. Leave empty to let Caddy read it from the config
+# (the default is http://localhost:2019). Set this only if you changed the
+# "admin" global option in your Caddyfile.
+ADMIN_ADDR=""
+
+# Optional: drop privileges after start. Leave empty to stay root (Caddy
+# needs root to bind ports 80/443 unless the listening addresses or
+# capabilities are changed).
+CADDY_USER=""
+CADDY_GROUP=""
+
+# Read local overrides, if any.
+[ -r /etc/default/${NAME} ] && . /etc/default/${NAME}
+
+# Allow overrides from the environment as well.
+: "${CONFIG:=/etc/frankenphp/Caddyfile}"
+: "${ADAPTER:=caddyfile}"
+: "${PIDFILE:=/run/${NAME}.pid}"
+: "${LOGFILE:=/var/log/${NAME}/${NAME}.log}"
+
+# Build the argument lists used for the Caddy sub-commands.
+RUN_ARGS="run --config ${CONFIG} --adapter ${ADAPTER}"
+STOP_ARGS="stop --config ${CONFIG} --adapter ${ADAPTER}"
+RELOAD_ARGS="reload --config ${CONFIG} --adapter ${ADAPTER}"
+[ -n "${ADMIN_ADDR}" ] && STOP_ARGS="${STOP_ARGS} --address ${ADMIN_ADDR}"
+[ -n "${ADMIN_ADDR}" ] && RELOAD_ARGS="${RELOAD_ARGS} --address ${ADMIN_ADDR}"
+
+SSD_USER_ARGS=""
+[ -n "${CADDY_USER}" ]  && SSD_USER_ARGS="${SSD_USER_ARGS} --chuid ${CADDY_USER}"
+[ -n "${CADDY_GROUP}" ] && SSD_USER_ARGS="${SSD_USER_ARGS} --group ${CADDY_GROUP}"
+
+#
+# Is the daemon running?
+#
+is_running()
+{
+    pidofproc -p "${PIDFILE}" "${DAEMON}" >/dev/null 2>&1
+}
+
+#
+# Start Caddy.
+#
+do_start()
+{
+    if is_running; then
+        log_progress_msg "already running"
+        return 0
+    fi
+
+    install -d -m 0755 "$(dirname "${PIDFILE}")" || return 1
+    install -d -m 0755 "$(dirname "${LOGFILE}")" || return 1
+    rm -f "${PIDFILE}"
+
+    # "frankenphp run" stays in the foreground, so background it with
+    # start-stop-daemon and let Caddy write its JSON logs to LOGFILE.
+    # --no-close keeps stdout/stderr so the redirect below is honoured.
+    if ! start-stop-daemon --start --quiet --background --make-pidfile \
+            --pidfile "${PIDFILE}" --exec "${DAEMON}" ${SSD_USER_ARGS} \
+            --no-close -- ${RUN_ARGS} >> "${LOGFILE}" 2>&1; then
+        rm -f "${PIDFILE}"
+        return 1
+    fi
+
+    # Make sure Caddy did not exit right away (bad Caddyfile, port in use,
+    # etc.). Caddy starts almost instantly, so a short poll is enough.
+    i=0
+    while [ "${i}" -lt 30 ]; do
+        if is_running; then
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.2
+    done
+
+    rm -f "${PIDFILE}"
+    return 1
+}
+
+#
+# Stop Caddy.
+#
+do_stop()
+{
+    if ! is_running; then
+        rm -f "${PIDFILE}"
+        log_progress_msg "not running"
+        return 0
+    fi
+
+    # 1) Preferred: ask the running instance to shut down gracefully
+    #    through its admin API (same mechanism as "caddy stop").
+    if ! "${DAEMON}" ${STOP_ARGS} >/dev/null 2>&1; then
+        # 2) Fallback when the admin endpoint is unavailable (disabled or
+        #    bound to another address): a signal based stop. Caddy handles
+        #    SIGTERM gracefully as well.
+        start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 \
+            --pidfile "${PIDFILE}" --exec "${DAEMON}" || true
+    fi
+
+    # 3) Wait for the process to disappear (workers may take a moment).
+    i=0
+    while [ "${i}" -lt 60 ]; do
+        is_running || break
+        i=$((i + 1))
+        sleep 0.5
+    done
+
+    # 4) Force kill if it is somehow still alive.
+    if is_running; then
+        start-stop-daemon --stop --quiet --signal=KILL \
+            --pidfile "${PIDFILE}" --exec "${DAEMON}" || true
+        sleep 1
+    fi
+
+    if is_running; then
+        return 1
+    fi
+
+    rm -f "${PIDFILE}"
+    return 0
+}
+
+#
+# Reload the configuration without dropping connections.
+#
+do_reload()
+{
+    if ! is_running; then
+        log_progress_msg "not running"
+        return 7
+    fi
+
+    # Ask the running instance to load a new config through its admin API.
+    "${DAEMON}" ${RELOAD_ARGS} >/dev/null 2>&1 || return 1
+    return 0
+}
+
+#
+# Show the status.
+#
+do_status()
+{
+    status_of_proc -p "${PIDFILE}" "${DAEMON}" "${NAME}"
+}
+
+rc=0
+case "${1}" in
+    start)
+        log_daemon_msg "Starting ${DESC}" "${NAME}"
+        do_start || rc=$?
+        log_end_msg "${rc}"
+        ;;
+    stop)
+        log_daemon_msg "Stopping ${DESC}" "${NAME}"
+        do_stop || rc=$?
+        log_end_msg "${rc}"
+        ;;
+    restart)
+        log_daemon_msg "Restarting ${DESC}" "${NAME}"
+        do_stop || true
+        do_start || rc=$?
+        log_end_msg "${rc}"
+        ;;
+    reload)
+        log_daemon_msg "Reloading ${DESC} configuration" "${NAME}"
+        do_reload || rc=$?
+        log_end_msg "${rc}"
+        ;;
+    force-reload)
+        log_daemon_msg "Reloading ${DESC} configuration" "${NAME}"
+        do_reload || rc=$?
+        if [ "${rc}" -eq 0 ]; then
+            log_end_msg 0
+        else
+            # Reload not possible (e.g. not running): fall back to restart.
+            log_end_msg "${rc}"
+            rc=0
+            log_daemon_msg "Restarting ${DESC}" "${NAME}"
+            do_stop || true
+            do_start || rc=$?
+            log_end_msg "${rc}"
+        fi
+        ;;
+    status)
+        do_status || rc=$?
+        ;;
+    *)
+        echo "Usage: ${0} {start|stop|restart|reload|force-reload|status}" >&2
+        rc=3
+        ;;
+esac
+
+exit "${rc}"
