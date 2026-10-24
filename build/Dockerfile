@@ -1,4 +1,4 @@
-FROM dunglas/frankenphp
+FROM dunglas/frankenphp:1-php8-trixie
 
 RUN apt-get update ;\
   env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -14,6 +14,10 @@ RUN apt-get update ;\
   wget; \
   install-php-extensions \
   pdo_mysql \
+  pdo_pgsql \
+  pdo_sqlite \
+  xlswriter \
+  redis \
   gd \
   intl \
   zip \
@@ -21,11 +25,16 @@ RUN apt-get update ;\
 
 
 RUN curl -o- https://fnm.vercel.app/install | bash; \
-  bash -c 'source /root/.bashrc; fnm install 24'
+  bash -c 'source /root/.bashrc; fnm install 24; node -v'
 
 
   # sysvinit-core \
 
 EXPOSE 22 80 443
+
+ 
+COPY caddy.initd /etc/init.d/caddy
+COPY config/php.ini-production /usr/local/etc/php/php.ini
+COPY init /sbin/init
 
 ENTRYPOINT [ "/bin/bash", "/sbin/init" ]

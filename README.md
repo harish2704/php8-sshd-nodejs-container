@@ -11,10 +11,10 @@ services:
     image: "ghcr.io/harish2704/php8-sshd-nodejs-container:latest"
     tty: true
     volumes:
-      - ./build/caddy.initd:/etc/init.d/caddy
-      - ./config/php.ini-production:/usr/local/etc/php/php.ini
+      # - ./build/caddy.initd:/etc/init.d/caddy
+      # - ./build/config/php.ini-production:/usr/local/etc/php/php.ini
+      # - ./build/init:/sbin/init
       - ./srvroot:/public
-      - ./init:/sbin/init
       - ./authorized_keys:/root/.ssh/authorized_keys
     # entrypoint: ["/bin/bash", "-c", "trap \"echo Shutting down; exit 0\" SIGTERM SIGINT SIGKILL; /bin/sleep infinity & wait"]
     ports:

@@ -5,13 +5,12 @@ services:
       context: ./build
     tty: true
     volumes:
-      - ./build/caddy.initd:/etc/init.d/caddy
-      - ./config/php.ini-production:/usr/local/etc/php/php.ini
+      # - ./build/caddy.initd:/etc/init.d/caddy
+      # - ./build/config/php.ini-production:/usr/local/etc/php/php.ini
+      # - ./build/init:/sbin/init
       - ./srvroot:/public
-      - ./init:/sbin/init
       - ./authorized_keys:/root/.ssh/authorized_keys
     # entrypoint: ["/bin/bash", "-c", "trap \"echo Shutting down; exit 0\" SIGTERM SIGINT SIGKILL; /bin/sleep infinity & wait"]
-    entrypoint: ["/bin/bash", "/sbin/init" ]
     ports:
       - "3022:22"
       - "3080:80"
@@ -22,7 +21,14 @@ services:
       CADDY_EXTRA_CONFIG: ""
       SERVER_NAME: ":80"
       SERVER_ROOT: /public
-      MERCURE_TRUSTED_ISSUERS: "https://localhost"
-      MERCURE_EXTRA_DIRECTIVES: ""
-      CADDY_SERVER_EXTRA_DIRECTIVES: ""
+      CADDY_SERVER_EXTRA_DIRECTIVES: |
+        log {
+            output file /var/log/caddy/caddy.log {
+                roll_size 10MB
+                roll_keep 5
+                roll_keep_for 30d
+            }
+            format json
+            level INFO
+        }
 
