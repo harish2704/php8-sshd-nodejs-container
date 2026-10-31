@@ -1,0 +1,41 @@
+{
+	# Global options block. Kept empty on purpose — the minimal
+	# defaults are enough for HTTP-only serving. Add directives such as
+	# 'skip_install_trust' or 'admin' here if you ever need them.
+}
+
+# Minimal server listening on HTTP port 80 only (no automatic HTTPS,
+# no 443 listener — keep this block the only site block).
+:80 {
+	# Log to a file with rotation: roll when the file reaches 10 MB,
+	# keep the last 5 rolled files, and each for at most 30 days.
+	log {
+		output file /var/log/caddy/caddy.log {
+			roll_size 10MB
+			roll_keep 5
+			roll_keep_for 30d
+		}
+		# use 'console' for human-readable log lines; use 'json' for structured logs
+		format json
+	}
+
+	# ---------------------------------------------------------------
+	# Reverse proxy demo:
+	# Forward anything under /api/* to a backend server (e.g. a
+	# Node.js app started in the container with `node server.js`
+	# listening on port 3000).
+	# ---------------------------------------------------------------
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# ---------------------------------------------------------------
+	# Plain PHP application demo:
+	# Serve everything else from the web root with FrankenPHP's
+	# php_server handler (file server + PHP = index.php routing).
+	# ---------------------------------------------------------------
+	handle {
+		root * {$SERVER_ROOT:-/public}
+		php_server
+	}
+}

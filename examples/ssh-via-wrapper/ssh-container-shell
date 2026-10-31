@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+set -x
+
+CONTAINER="${1:?Missing container name}"
+REQUESTED_COMMAND="${SSH_ORIGINAL_COMMAND:-}"
+LOG_FILE="/tmp/ssh-container-wrapper-$CONTAINER-$USER.log"
+
+# Send Bash xtrace output to FD 19, not stdout/stderr.
+# export BASH_XTRACEFD=19
+# export PS4='+ $(date "+%Y-%m-%d %H:%M:%S%z") pid=$$ ${BASH_SOURCE}:${LINENO}: '
+
+if [[ -n "$LOG_FILE" ]]; then
+  {
+      printf '\n===== Invocation: %s =====\n' "$(date '+%Y-%m-%d %H:%M:%S%z')"
+      printf 'PID: %s\n' "$$"
+      printf 'User: %s\n' "$(id)"
+      printf 'Container: %s\n' "$CONTAINER"
+      printf 'SSH_CONNECTION: %s\n' "${SSH_CONNECTION:-unknown}"
+      printf 'SSH_ORIGINAL_COMMAND: %q\n' "$REQUESTED_COMMAND"
+  } >> "$LOG_FILE"
+fi
+
+
+if [[ -z "$REQUESTED_COMMAND" ]]; then
+    # Interactive SSH login.
+    exec podman exec -it "$CONTAINER" /bin/bash
+
+elif [[ "$REQUESTED_COMMAND" == scp\ * ||
+	"$REQUESTED_COMMAND" == "/usr/lib/openssh/sftp-server"* ||
+	"$REQUESTED_COMMAND" == "rsync"* ||
+        "$REQUESTED_COMMAND" == scp ]]; then
+    # Legacy SCP protocol.
+    exec podman exec -i "$CONTAINER" $REQUESTED_COMMAND
+
+else
+    # Existing remote-command behavior.
+    exec podman exec "$CONTAINER" /bin/bash -c "$REQUESTED_COMMAND"
+fi
+

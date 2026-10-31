@@ -28,6 +28,16 @@ RUN curl -o- https://fnm.vercel.app/install | bash; \
   bash -c 'source /root/.bashrc; fnm install 24; node -v'
 
 
+RUN apt-get update ; apt-get install -y --no-install-recommends \
+  openssh-sftp-server \
+  rsync \
+  python3 \
+  python3-pip \
+  python3-uvicorn
+
+RUN install-php-extensions \
+  mysqli
+
   # sysvinit-core \
 
 EXPOSE 22 80 443

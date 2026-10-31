@@ -2,6 +2,24 @@
 php server container along with dropbear sshd and nodejs installed
 
 
+## Examples
+
+The [`examples/`](examples) directory contains ready-to-run variants of this
+setup:
+
+* [`examples/ssh-via-wrapper`](examples/ssh-via-wrapper) — give users direct
+  SSH access into a running container via the host's sshd and a
+  forced-command wrapper, without giving them access to the host system or
+  the container runtime. Also shows how to run the container with a custom
+  init script that does *not* start the built-in dropbear sshd.
+
+* [`examples/custom-caddyfile`](examples/custom-caddyfile) — host a PHP app
+  with your own Caddyfile, mounted as a directory over `/etc/frankenphp`
+  (instead of configuring Caddy through environment-variable placeholders).
+  Includes a file-based access log with rotation, a plain-PHP hosting demo
+  and a reverse proxy demo.
+
+
 ## Usage
 
 **compose.yml**

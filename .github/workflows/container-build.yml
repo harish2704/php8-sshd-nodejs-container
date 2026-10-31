@@ -38,6 +38,12 @@ jobs:
         with:
           context: ./build
           platforms: linux/amd64,linux/arm64
+          # Avoids the extra "unknown/unknown" entries in the registry's OS/Arch listing.
+          # BuildKit otherwise attaches automatically generated "provenance" attestation
+          # manifests (build metadata / SBOM refs) which get listed as their own
+          # "unknown/unknown" platform alongside linux/amd64 and linux/arm64.
+          # Disabling provenance does not change the actual image contents.
+          provenance: false
           push: true
           tags: |
             ghcr.io/harish2704/php8-sshd-nodejs-container:latest

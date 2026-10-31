@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Custom init script for the "SSH via host wrapper" example.
+# Same as the stock build/init, but without the dropbear SSH server:
+# SSH access is provided by the host sshd + ssh-container-shell wrapper
+# (see README), so no sshd needs to run inside the container at all.
+
+trap "echo Shutting down; exit 0" SIGTERM SIGINT SIGKILL
+
+/etc/init.d/caddy start
+
+/bin/sleep infinity & wait

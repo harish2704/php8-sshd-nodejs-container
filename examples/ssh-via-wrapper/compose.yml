@@ -1,0 +1,27 @@
+# Sample compose file for the "SSH via host wrapper" example.
+#
+# Difference from the top-level compose.yml:
+#   * mounts this directory's custom `init` script (no dropbear sshd) over /sbin/init
+#   * does NOT publish port 22 — containers are reached via the host
+#     sshd + ssh-container-shell wrapper instead (see README).
+services:
+  www:
+    image: "ghcr.io/harish2704/php8-sshd-nodejs-container:latest"
+    tty: true
+    volumes:
+      # custom init script without the dropbear sshd server
+      - ./init:/sbin/init
+      # web root (paths are relative to this compose file)
+      - ../../srvroot:/public
+    ports:
+      - "3080:80"
+      - "3443:443"
+    environment:
+      CADDY_GLOBAL_OPTIONS: ""
+      FRANKENPHP_CONFIG: ""
+      CADDY_EXTRA_CONFIG: ""
+      SERVER_NAME: ":80"
+      SERVER_ROOT: /public
+      MERCURE_TRUSTED_ISSUERS: "https://localhost"
+      MERCURE_EXTRA_DIRECTIVES: ""
+      CADDY_SERVER_EXTRA_DIRECTIVES: ""

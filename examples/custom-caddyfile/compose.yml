@@ -1,0 +1,25 @@
+# Sample compose file demonstrating hosting a PHP application with a
+# custom Caddyfile.
+#
+# Difference from the top-level compose.yml:
+#   * mounts this directory's etc-frankenphp/ (containing the custom
+#     Caddyfile) over /etc/frankenphp, so the image's stock Caddyfile is
+#     completely replaced. NOTE: a whole *directory* is mounted instead of
+#     a single file — binding a single file can lead to synchronization
+#    /edit issues after edits.
+#   * because the Caddyfile is fully controlled here, none of the
+#     CADDY_*/FRANKENPHP_*/SERVER_NAME placeholders are needed.
+#     SERVER_ROOT is still honoured (see the Caddyfile).
+services:
+  www:
+    image: "ghcr.io/harish2704/php8-sshd-nodejs-container:latest"
+    tty: true
+    volumes:
+      # custom Caddy configuration (directory mount, not a file mount)
+      - ./etc-frankenphp:/etc/frankenphp
+      # web root (paths are relative to this compose file)
+      - ../../srvroot:/public
+    ports:
+      - "3080:80"
+    environment:
+      SERVER_ROOT: /public
